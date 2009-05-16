@@ -70,13 +70,14 @@ class onemanga:
 		chsChapter = []
 		for ch in chs:
 			if chapter and stop:
-				if (float(ch[1].split()[-1]) >= chapter) and (float(ch[1].split()[-1]) <= stop):
+				if (float(ch[0].split('/')[-2]) >= chapter) and (float(ch[0].split('/')[-2]) <= stop):
 					chsChapter.append(ch)
+				chsChapter.append(ch)
 			elif chapter and not stop:
-				if (float(ch[1].split()[-1]) >= chapter):
+				if (float(ch[0].split('/')[-2]) >= chapter):
 					chsChapter.append(ch)
 			elif not chapter and stop:
-				if (float(ch[1].split()[-1]) <= stop):
+				if (float(ch[0].split('/')[-2]) <= stop):
 					chsChapter.append(ch)
 			else:
 				chsChapter.append(ch)
