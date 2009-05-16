@@ -66,7 +66,6 @@ class onemanga:
 		if chapter and (chapter > len(chs)):
 			self.log("max chapter: %s" % (str(len(chs)))) 		
 			sys.exit(1)
-			
 		chs.reverse()
 		chsChapter = []
 		for ch in chs:
