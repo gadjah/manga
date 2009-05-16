@@ -66,13 +66,13 @@ class onemanga:
 		if chapter and (chapter > len(chs)):
 			self.log("max chapter: %s" % (str(len(chs)))) 		
 			sys.exit(1)
+			
 		chs.reverse()
 		chsChapter = []
 		for ch in chs:
 			if chapter and stop:
 				if (float(ch[0].split('/')[-2]) >= chapter) and (float(ch[0].split('/')[-2]) <= stop):
 					chsChapter.append(ch)
-				chsChapter.append(ch)
 			elif chapter and not stop:
 				if (float(ch[0].split('/')[-2]) >= chapter):
 					chsChapter.append(ch)
