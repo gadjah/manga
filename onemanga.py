@@ -16,6 +16,8 @@ def main():
 	cmd = optparse.OptionParser()
 	cmd.add_option("-u", "--url", dest="url", help="URL")
 	cmd.add_option("-f", "--file", dest="listfile", help="File")
+	cmd.add_option("-c", "--chapter", dest="chapter", type="int", help="Chapter")
+	cmd.add_option("-s", "--stop", dest="stop", type="int", help="Stop")
 	(options, args) = cmd.parse_args()
 	manga = onemanga()
 	if options.listfile and (options.listfile is not None):
@@ -32,8 +34,17 @@ def main():
 			item = re.sub('\n|\r', '', item)
 			manga.getManga(item)
 	elif options.url and (options.url is not None):
+		chapter = 0
+		stop = 0
+		if options.chapter:
+			chapter = options.chapter
+		if options.stop:
+			stop = options.stop
+		if stop and (stop < chapter):
+			print ("start: %s stop: %s") % (str(chapter), str(stop))
+			sys.exit(1)
 		if re.compile('http://').findall(options.url):
-			manga.getManga(options.url)
+			manga.getManga(options.url, chapter, stop)
 	else:
 		cmd.print_help()
 
@@ -45,15 +56,31 @@ class onemanga:
 		self.prefix = "onemanga"
 		self.cache = "cache"
 		
-	def getManga(self, url):
+	def getManga(self, url, chapter, stop):
 		mainPage = url
 		self.log(mainPage)
 		(html, headers) = self.openUrl(mainPage)
 		infoTitle = re.compile('Title: <span class="series-info">([^<]+)</span><br />').findall(html)
 		self.log(infoTitle[0])
-		chs = re.compile('<td class="ch-subject"><a href="([^"]+)">([^<])+</a></td>').findall(html)
+		chs = re.compile('<td class="ch-subject"><a href="([^"]+)">([^<]+)</a></td>').findall(html)
+		if chapter and (chapter > len(chs)):
+			self.log("max chapter: %s" % (str(len(chs)))) 		
+			sys.exit(1)
 		chs.reverse()
+		chsChapter = []
 		for ch in chs:
+			if chapter and stop:
+				if (float(ch[1].split()[-1]) >= chapter) and (float(ch[1].split()[-1]) <= stop):
+					chsChapter.append(ch)
+			elif chapter and not stop:
+				if (float(ch[1].split()[-1]) >= chapter):
+					chsChapter.append(ch)
+			elif not chapter and stop:
+				if (float(ch[1].split()[-1]) <= stop):
+					chsChapter.append(ch)
+			else:
+				chsChapter.append(ch)
+		for ch in chsChapter:
 			chUrl = "http://www.%s.com%s" % (self.prefix, ch[0])
 			self.log(chUrl)
 			(html, headers) = self.openUrl(chUrl)
