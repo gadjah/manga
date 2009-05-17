@@ -7,6 +7,7 @@ __date__ = "$Date: 2009/05/03 $"
 
 import optparse
 import urllib2
+import urllib
 import os
 import sys
 import re
@@ -18,6 +19,7 @@ def main():
 	cmd.add_option("-f", "--file", dest="listfile", help="File")
 	cmd.add_option("-c", "--chapter", dest="chapter", type="int", help="Chapter")
 	cmd.add_option("-s", "--stop", dest="stop", type="int", help="Stop")
+	cmd.add_option("-z", "--search", dest="search", help="Search")
 	(options, args) = cmd.parse_args()
 	manga = onemanga()
 	if options.listfile and (options.listfile is not None):
@@ -45,6 +47,8 @@ def main():
 			sys.exit(1)
 		if re.compile('http://').findall(options.url):
 			manga.getManga(options.url, chapter, stop)
+	elif options.search and (options.search is not None):
+		manga.searchManga(options.search)
 	else:
 		cmd.print_help()
 
@@ -123,9 +127,25 @@ class onemanga:
 					self.log("download %s" % (outFile))
 					(image, header) = self.openUrl(imageHtml[0])			
 					self.writeFile(outFile, image)
+	def searchManga(self, search):
+		s = {"series_name": search, "author_name": "", "artist_name": ""}
+		url = "http://feedback.%s.com/directory/search/" % (self.prefix)
+		(html, headers) = self.openUrl(url, urllib.urlencode(s))
+		if '<tr class="bg01">' in html:
+			result = re.compile('<td class="ch-subject"><a href="([^"]+)"\s?>([^<]+)</a>').findall(html)
+			if result:
+				c = 0
+				for item in result:
+					c += 1
+					shttp = "http://www.%s.com%s" % (self.prefix, item[0])
+					print "%03d. %s: %s" % (c, item[1], shttp)
+			else:
+				print "No matches found."
+		else:
+			print "No matches found."		
 
-	def openUrl(self, url):
-		page = self.opener.open(url)	
+	def openUrl(self, url, data=None):
+		page = self.opener.open(url, data)	
 		html = page.read()
 		return(html, page.headers.items())
 		

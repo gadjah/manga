@@ -7,6 +7,7 @@ __date__ = "$Date: 2009/05/03 $"
 
 import optparse
 import urllib2
+import urllib
 import os
 import sys
 import re
@@ -18,6 +19,7 @@ def main():
 	cmd.add_option("-f", "--file", dest="listfile", help="File")
 	cmd.add_option("-c", "--chapter", type="int", dest="chapter", help="Chapter")
 	cmd.add_option("-s", "--stop", type="int", dest="stop", help="Stop")
+	cmd.add_option("-z", "--search", dest="search", help="search")
 	(options, args) = cmd.parse_args()
 	manga = mangafox()
 	if options.listfile and (options.listfile is not None):
@@ -45,6 +47,8 @@ def main():
 				print ("start: %s stop: %s") % (str(chapter), str(stop))
 				sys.exit(1)
 			manga.getManga(options.url, chapter, stop)
+	elif options.search and (options.search is not None):			
+		manga.searchManga(options.search)
 	else:
 		cmd.print_help()
 
@@ -62,7 +66,7 @@ class mangafox:
 		(html, headers) = self.openUrl(mainPage)
 		infoTitle = re.compile('<h2>([^>]+)</h2>').findall(html)
 		self.log(infoTitle[0])
-		chs = re.compile('class="edit">edit</a>\s+?<a href="([^"]+)" class="chico">').findall(html)
+		chs = re.compile('class="edit">edit</a>\s+?<a href="([^"]+)" class="chico">').findall(html)		
 		if chapter and (chapter > len(chs)):
 			self.log("max chapter: %s" % (str(len(chs)))) 		
 			sys.exit(1)
@@ -80,7 +84,7 @@ class mangafox:
 				if (float(c[0]) <= stop):
 						chsChapter.append(ch)
 			else:
-				chsChapter.append(ch)
+				chsChapter.append(ch)	
 		for ch in range(0, len(chsChapter)):
 			if not os.path.exists(chsChapter[ch].lstrip('/')):
 				os.makedirs(chsChapter[ch].lstrip('/'))
@@ -96,13 +100,9 @@ class mangafox:
 					localFile = '%s%s%s.html' % (self.cache, chsChapter[ch], pagen)
 					page = self.opener.open('%s%s.html' % (chUrl, pagen))
 					if os.path.exists(localFile):
-						if page.headers.items()[0][1].isdigit():
-							if long(page.headers.items()[0][1]) == os.path.getsize(localFile):
-								html = self.readFile(localFile)
-								self.log("skip %s" % (localFile))
-							else:
-								html = page.read()
-								self.writeFile(localFile, html)
+						if page.headers.getheader('Content-Length') and (long(page.headers.getheader('Content-Length')) == os.path.getsize(localFile)):
+							html = self.readFile(localFile)
+							self.log("skip %s" % (localFile))
 						else:
 							html = page.read()
 							self.writeFile(localFile, html)
@@ -118,7 +118,24 @@ class mangafox:
 					self.log("download %s" % (outFile))
 					(image, header) = self.openUrl(imageHtml[0])			
 				self.writeFile(outFile, image)
-
+	
+	def searchManga(self, search):
+		s = {"name": search}
+		url = "http://www.%s.com/search.php" % (self.prefix)
+		(html, headers) = self.openUrl(url + '?' + urllib.urlencode(s))
+		if '<table id="listing">' in html:
+			result = re.compile('<td><a href="([^"]+)" class="manga_\w+">([^<]+)</a>').findall(html)
+			if result:
+				c = 0
+				for item in result:
+					c += 1
+					shttp = "http://www.%s.com%s" % (self.prefix, item[0])
+					print "%03d. %s: %s" % (c, item[1], shttp)
+			else:
+				print "No matches found."
+		else:
+			print "No matches found."
+		
 	def openUrl(self, url):
 		page = self.opener.open(url)	
 		html = page.read()
