@@ -60,7 +60,7 @@ class mangafox:
 		self.prefix = "mangafox"
 		self.cache = "cache"
 		
-	def getManga(self, url, chapter, stop):
+	def getManga(self, url, chapter=0, stop=0):
 		mainPage = "%s%s" % (url, '?no_warning=1')
 		self.log(mainPage)
 		(html, headers) = self.openUrl(mainPage)

@@ -60,7 +60,7 @@ class onemanga:
 		self.prefix = "onemanga"
 		self.cache = "cache"
 		
-	def getManga(self, url, chapter, stop):
+	def getManga(self, url, chapter=0, stop=0):
 		mainPage = url
 		self.log(mainPage)
 		(html, headers) = self.openUrl(mainPage)
