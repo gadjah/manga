@@ -8,6 +8,7 @@ __date__ = "$Date: 2009/05/03 $"
 import optparse
 import urllib2
 import urllib
+import socket
 import os
 import sys
 import re
@@ -156,7 +157,17 @@ class mangafox:
 	def openUrl(self, url):
 		request = urllib2.Request(url)
 		request.add_header('Accept-encoding', 'gzip')
-		page = self.opener.open(request)
+		retry = 1
+		maxRetry = 4
+		while retry < maxRetry:
+			try:
+				page = self.opener.open(request)
+			except urllib2.URLError, e:
+				self.log(e)
+				self.log("(%s) %s" % (retry, request.get_full_url()))
+				retry += 1
+			else:
+				retry = maxRetry
 		html = page.read()
 		if page.headers.getheader('content-encoding') == 'gzip':
 			html = self.gunzip(cStringIO.StringIO(html))
