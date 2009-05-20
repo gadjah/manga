@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 """
 __version__ = "$Revision: 0.1 $"
@@ -12,16 +12,19 @@ import os
 import sys
 import re
 import time
+import gzip
+import cStringIO
 
 def main():
 	cmd = optparse.OptionParser()
 	cmd.add_option("-u", "--url", dest="url", help="URL")
 	cmd.add_option("-f", "--file", dest="listfile", help="File")
-	cmd.add_option("-c", "--chapter", type="int", dest="chapter", help="Chapter")
+	cmd.add_option("-c", "--chapter", type="int", dest="chapter", help="Chapter=int")
 	cmd.add_option("-s", "--stop", type="int", dest="stop", help="Stop")
-	cmd.add_option("-z", "--search", dest="search", help="search")
+	cmd.add_option("-z", "--search", dest="search", help="Search")
+	cmd.add_option("-d", "--debug", action="store_true", dest="debug", default=False)
 	(options, args) = cmd.parse_args()
-	manga = mangafox()
+	manga = mangafox(debug=options.debug)
 	if options.listfile and (options.listfile is not None):
 		try:
 			listFile = file(options.listfile, 'r')
@@ -53,9 +56,9 @@ def main():
 		cmd.print_help()
 
 class mangafox:
-	def __init__(self):
+	def __init__(self, debug=False):
 		#self.proxy = urllib2.ProxyHandler({'http': 'www-proxy.com:8080'})
-		self.opener = urllib2.build_opener()
+		self.opener = urllib2.build_opener(urllib2.HTTPHandler(debuglevel=debug))
 		self.opener.addheaders = [('User-Agent', 'Mozilla/4.0 (compatible; MSIE 7.0b; Windows NT 6.0)')]	
 		self.prefix = "mangafox"
 		self.cache = "cache"
@@ -94,11 +97,22 @@ class mangafox:
 			self.log(chUrl)
 			(html, headers) = self.openUrl(chUrl)
 			pageCount = re.compile('<option value="\d+"[^>]+?>(\d+)</option>').findall(html)
+			gzip = False
+			ext = html
 			for pagen in range(1, (len(pageCount) / 2) + 1):
 				self.log('Page: %s %s%s.html' % (pagen, chUrl, pagen))
 				if int(pagen) > 1:
-					localFile = '%s%s%s.html' % (self.cache, chsChapter[ch], pagen)
-					page = self.opener.open('%s%s.html' % (chUrl, pagen))
+					request = urllib2.Request('%s%s.html' % (chUrl, pagen))
+					request.add_header('Accept-encoding', 'gzip')
+					page = self.opener.open(request)
+					#page = self.opener.open('%s%s.html' % (chUrl, pagen))
+					if page.headers.getheader('content-encoding') == 'gzip':
+						gzip = True
+						ext = 'gz'
+					else:
+						gzip = False
+						ext = 'html'
+					localFile = '%s%s%s.%s' % (self.cache, chsChapter[ch], pagen, ext)
 					if os.path.exists(localFile):
 						if page.headers.getheader('Content-Length') and (long(page.headers.getheader('Content-Length')) == os.path.getsize(localFile)):
 							html = self.readFile(localFile)
@@ -109,6 +123,8 @@ class mangafox:
 					else:
 						html = page.read()
 						self.writeFile(localFile, html)
+				if gzip:
+					html = self.gunzip(cStringIO.StringIO(html))
 				imageHtml = re.compile(';"><img src="([^"]+)" width="\d+" id="image"').findall(html) 
 				outFile = '%s/%s' % (chsChapter[ch].strip('/'), imageHtml[0].split('/')[-1])
 				if os.path.exists(outFile):
@@ -116,7 +132,8 @@ class mangafox:
 					continue
 				else:
 					self.log("download %s" % (outFile))
-					(image, header) = self.openUrl(imageHtml[0])			
+					(image, header) = self.openUrl(imageHtml[0])	
+							
 				self.writeFile(outFile, image)
 	
 	def searchManga(self, search):
@@ -135,10 +152,14 @@ class mangafox:
 				print "No matches found."
 		else:
 			print "No matches found."
-		
+
 	def openUrl(self, url):
-		page = self.opener.open(url)	
+		request = urllib2.Request(url)
+		request.add_header('Accept-encoding', 'gzip')
+		page = self.opener.open(request)
 		html = page.read()
+		if page.headers.getheader('content-encoding') == 'gzip':
+			html = self.gunzip(cStringIO.StringIO(html))
 		return(html, page.headers.items())
 	
 	def writeFile(self, filename, content):
@@ -151,6 +172,12 @@ class mangafox:
 		content = fileCache.read()
 		fileCache.close()
 		return content
+		
+	def gunzip(self, fileobj):
+		g = gzip.GzipFile(fileobj=fileobj)
+		gFile = g.read()
+		g.close()
+		return gFile
 		
 	def log(self, str):
 		print "%s >>> %s" % (time.strftime("%x - %X", time.localtime()), str)

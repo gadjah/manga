@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 """
 __version__ = "$Revision: 0.1 $"
@@ -12,6 +12,8 @@ import os
 import sys
 import re
 import time
+import gzip
+import cStringIO
 
 def main():
 	cmd = optparse.OptionParser()
@@ -20,8 +22,9 @@ def main():
 	cmd.add_option("-c", "--chapter", dest="chapter", type="int", help="Chapter")
 	cmd.add_option("-s", "--stop", dest="stop", type="int", help="Stop")
 	cmd.add_option("-z", "--search", dest="search", help="Search")
+	cmd.add_option("-d", "--debug", action="store_true", dest="debug", default=False)
 	(options, args) = cmd.parse_args()
-	manga = onemanga()
+	manga = onemanga(options.debug)
 	if options.listfile and (options.listfile is not None):
 		try:
 			listFile = file(options.listfile, 'r')
@@ -53,9 +56,9 @@ def main():
 		cmd.print_help()
 
 class onemanga:
-	def __init__(self):
+	def __init__(self, debug=False):
 		#self.proxy = urllib2.ProxyHandler({'http': 'www-proxy.com:8080'})
-		self.opener = urllib2.build_opener()
+		self.opener = urllib2.build_opener(urllib2.HTTPHandler(debuglevel=debug))
 		self.opener.addheaders = [('User-Agent', 'Mozilla/4.0 (compatible; MSIE 7.0b; Windows NT 6.0)')]	
 		self.prefix = "onemanga"
 		self.cache = "cache"
@@ -100,11 +103,22 @@ class onemanga:
 			self.log(subChUrl)
 			(html, headers) = self.openUrl(subChUrl)
 			pageCount = re.compile('<option value="([^"]+)"[^>]+?>[^<]+</option>').findall(html)
+			gzip = False
+			ext = 'html'
 			for pagen in range(0, len(pageCount)):
 				self.log('%s Page: %s %s%s/' % (infoChapter[0][1].strip(), pageCount[pagen], chUrl, pageCount[pagen]))
 				if int(pagen) > 0:
-					localFile = "%s/%s%s%s.html" % (self.cache, self.prefix, subPage[0], pageCount[pagen])
-					page = self.opener.open('%s%s/' % (chUrl, pageCount[pagen]))
+					#page = self.opener.open('%s%s/' % (chUrl, pageCount[pagen]))
+					request = urllib2.Request('%s%s/' % (chUrl, pageCount[pagen]))
+					request.add_header('Accept-encoding', 'gzip')
+					page = self.opener.open(request)
+					if page.headers.getheader('content-encoding') == 'gzip':
+						gzip = True
+						ext = 'gz'
+					else:
+						gzip = False
+						ext = 'html'
+					localFile = "%s/%s%s%s.%s" % (self.cache, self.prefix, subPage[0], pageCount[pagen], ext)
 					if os.path.exists(localFile):
 						if page.headers.items()[0][1].isdigit():
 							if long(page.headers.items()[0][1]) == os.path.getsize(localFile):
@@ -118,6 +132,8 @@ class onemanga:
 					else:
 						html = page.read()
 						self.writeFile(localFile, html)
+				if gzip:
+					html = self.gunzip(cStringIO.StringIO(html))
 				imageHtml = re.compile('<input type="hidden" name="img_url" value="([^"]+)" />').findall(html) 
 				outFile = '%s%s%s' % (self.prefix, subPage[0], imageHtml[0].split('/')[-1])
 				if os.path.exists(outFile):
@@ -127,6 +143,7 @@ class onemanga:
 					self.log("download %s" % (outFile))
 					(image, header) = self.openUrl(imageHtml[0])			
 					self.writeFile(outFile, image)
+					
 	def searchManga(self, search):
 		s = {"series_name": search, "author_name": "", "artist_name": ""}
 		url = "http://feedback.%s.com/directory/search/" % (self.prefix)
@@ -143,10 +160,14 @@ class onemanga:
 				print "No matches found."
 		else:
 			print "No matches found."		
-
+						
 	def openUrl(self, url, data=None):
-		page = self.opener.open(url, data)	
+		request = urllib2.Request(url)
+		request.add_header('Accept-encoding', 'gzip')
+		page = self.opener.open(request, data)
 		html = page.read()
+		if page.headers.getheader('content-encoding') == 'gzip':
+			html = self.gunzip(cStringIO.StringIO(html))
 		return(html, page.headers.items())
 		
 	def writeFile(self, filename, content):
@@ -159,6 +180,12 @@ class onemanga:
 		content = fileCache.read()
 		fileCache.close()
 		return content
+
+	def gunzip(self, fileobj):
+		g = gzip.GzipFile(fileobj=fileobj)
+		gFile = g.read()
+		g.close()
+		return gFile
 	
 	def log(self, str):
 		print "%s >>> %s" % (time.strftime("%x - %X", time.localtime()), str)
