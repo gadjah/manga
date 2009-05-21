@@ -1,19 +1,19 @@
 #!/usr/bin/env python
 
 """
-__version__ = "$Revision: 0.1 $"
-__date__ = "$Date: 2009/05/03 $"
+__version__ = "$Revision: 0.3 $"
+__date__ = "$Date: 2009/05/21 $"
 """
 
 import optparse
 import urllib2
 import urllib
-import socket
 import os
 import sys
 import re
 import time
 import gzip
+import zipfile
 import cStringIO
 
 def main():
@@ -24,8 +24,9 @@ def main():
 	cmd.add_option("-s", "--stop", type="int", dest="stop", help="Stop")
 	cmd.add_option("-z", "--search", dest="search", help="Search")
 	cmd.add_option("-d", "--debug", action="store_true", dest="debug", default=False)
+	cmd.add_option("--zip", action="store_true", dest="zip", default=True)
 	(options, args) = cmd.parse_args()
-	manga = mangafox(debug=options.debug)
+	manga = mangafox(debug=options.debug, zip=options.zip)
 	if options.listfile and (options.listfile is not None):
 		try:
 			listFile = file(options.listfile, 'r')
@@ -57,12 +58,13 @@ def main():
 		cmd.print_help()
 
 class mangafox:
-	def __init__(self, debug=False):
+	def __init__(self, debug=False, zip=False):
 		#self.proxy = urllib2.ProxyHandler({'http': 'www-proxy.com:8080'})
 		self.opener = urllib2.build_opener(urllib2.HTTPHandler(debuglevel=debug))
 		self.opener.addheaders = [('User-Agent', 'Mozilla/4.0 (compatible; MSIE 7.0b; Windows NT 6.0)')]	
 		self.prefix = "mangafox"
 		self.cache = "cache"
+		self.zip = zip
 		
 	def getManga(self, url, chapter=0, stop=0):
 		mainPage = "%s%s" % (url, '?no_warning=1')
@@ -134,9 +136,15 @@ class mangafox:
 				else:
 					self.log("download %s" % (outFile))
 					(image, header) = self.openUrl(imageHtml[0])	
-							
 				self.writeFile(outFile, image)
-	
+			if self.zip is True:
+				zipName = self.prefix + "_"
+				for name in chsChapter[ch].split('/'):
+					if name and (name != 'manga'):
+						zipName += name + "_" 
+				zipName = zipName.rstrip('_') + ".zip"
+				self.createZip(dir=chsChapter[ch].lstrip('/'), zipName=zipName)
+			
 	def searchManga(self, search):
 		s = {"name": search}
 		url = "http://www.%s.com/search.php" % (self.prefix)
@@ -189,6 +197,15 @@ class mangafox:
 		gFile = g.read()
 		g.close()
 		return gFile
+		
+	def createZip(self, dir, zipName):
+		if os.path.isdir(dir):
+			self.log("creating %s" % (zipName))
+			zip = zipfile.ZipFile(zipName, mode="w", compression=zipfile.ZIP_DEFLATED)	
+			for item in os.listdir(dir):
+				self.log("=> %s to %s" % (item, zipName))
+				zip.write(dir + item)
+			zip.close()
 		
 	def log(self, str):
 		print "%s >>> %s" % (time.strftime("%x - %X", time.localtime()), str)
