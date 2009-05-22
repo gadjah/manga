@@ -73,7 +73,7 @@ class onemanga:
 		(html, headers) = self.openUrl(mainPage)
 		infoTitle = re.compile('Title: <span class="series-info">([^<]+)</span><br />').findall(html)
 		self.log(infoTitle[0])
-		chs = re.compile('<td class="ch-subject"><a href="([^"]+)">([^<]+)</a></td>').findall(html)
+		chs = re.compile('<td class="ch-subject"><a href="([^"]+)">([^<]+)</a>').findall(html)
 		if chapter and (chapter > len(chs)):
 			self.log("max chapter: %s" % (str(len(chs)))) 		
 			sys.exit(1)
@@ -95,7 +95,7 @@ class onemanga:
 			chUrl = "http://www.%s.com%s" % (self.prefix, ch[0])
 			self.log(chUrl)
 			(html, headers) = self.openUrl(chUrl)
-			infoChapter = re.compile('\s?<h1><a href="/">OM</a> / <a href="/[^/]+/">([^<]+)</a> /([^<]+)</h1>').findall(html)
+			infoChapter = re.compile('\s?<h1><a href="/">OM</a> / <a href="/[^/]+/">([^<]+)</a> /([^&<]+)').findall(html)
 			infoChapterTitle = re.compile('<p>Chapter Title: ([^<]+)</p>').findall(html)
 			self.log("%s %s: %s" % (infoChapter[0][0].strip(), infoChapter[0][1].strip(), infoChapterTitle[0].strip()))
 			subPage = re.compile('<ul>\s*?<li><a href="([^"]+)">[^<]+</a>\.</li>').findall(html)			
