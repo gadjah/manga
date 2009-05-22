@@ -25,7 +25,7 @@ def main():
 	cmd.add_option("-s", "--stop", dest="stop", type="int", help="Stop")
 	cmd.add_option("-z", "--search", dest="search", help="Search")
 	cmd.add_option("-d", "--debug", action="store_true", dest="debug", default=False)
-	cmd.add_option("--zip", action="store_true", dest="zip", default=True)
+	cmd.add_option("--zip", action="store_true", dest="zip", default=False)
 	(options, args) = cmd.parse_args()
 	manga = onemanga(debug=options.debug, zip=options.zip)
 	if options.listfile and (options.listfile is not None):
