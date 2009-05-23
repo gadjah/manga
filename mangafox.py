@@ -101,7 +101,7 @@ class mangafox:
 			(html, headers) = self.openUrl(chUrl)
 			pageCount = re.compile('<option value="\d+"[^>]+?>(\d+)</option>').findall(html)
 			gzip = False
-			ext = html
+			ext = 'html'
 			for pagen in range(1, (len(pageCount) / 2) + 1):
 				self.log('Page: %s %s%s.html' % (pagen, chUrl, pagen))
 				if int(pagen) > 1:
