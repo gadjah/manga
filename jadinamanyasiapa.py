@@ -1,0 +1,260 @@
+#!/usr/bin/env python
+
+"""
+__version__ = "$Revision: 0.5 $"
+__date__ = "$Date: 2009/06/06 $"
+"""
+
+import optparse
+import urllib2
+import urllib
+import os
+import sys
+import re
+import time
+import gzip
+import zipfile
+import cStringIO
+
+def main():
+	cmd = optparse.OptionParser()
+	cmd.add_option("-u", "--url", dest="url", help="URL")
+	cmd.add_option("-f", "--file", dest="listfile", help="File")
+	cmd.add_option("-c", "--chapter", type="int", dest="chapter", help="Chapter=int")
+	cmd.add_option("-s", "--stop", type="int", dest="stop", help="Stop")
+	cmd.add_option("-z", "--search", dest="search", help="Search")
+	cmd.add_option("-d", "--debug", action="store_true", dest="debug", default=False)
+	cmd.add_option("--zip", action="store_true", dest="zip", default=False)
+	(options, args) = cmd.parse_args()
+	manga = mangafox(debug=options.debug, zip=options.zip)
+	if options.listfile and (options.listfile is not None):
+		try:
+			listFile = file(options.listfile, 'r')
+		except IOError, e:
+			print e
+			sys.exit(1)
+		items = listFile.readlines()
+		for item in items:
+			item.lstrip()
+			if (item[0] == '#' or item[0] == ';'):
+				continue
+			item = re.sub('\n|\r', '', item)
+			manga.getManga(item)
+	elif options.url and (options.url is not None):
+		if re.compile('http://').findall(options.url):			
+			chapter = 0
+			stop = 0
+			if options.chapter:
+				chapter = options.chapter
+			if options.stop:
+				stop = options.stop
+			if stop and (stop < chapter):
+				print ("start: %s stop: %s") % (str(chapter), str(stop))
+				sys.exit(1)
+			manga.getManga(options.url, chapter, stop)
+	elif options.search and (options.search is not None):			
+		manga.searchManga(options.search)
+	else:
+		cmd.print_help()
+
+class mangafox:
+	def __init__(self, debug=False, zip=False):
+		self.opener = urllib2.build_opener(urllib2.HTTPHandler(debuglevel=debug))
+		self.opener.addheaders = [('User-Agent', 'Mozilla/4.0 (compatible; MSIE 7.0b; Windows NT 6.0)')]	
+		self.prefix = "mangafox"
+		self.cache = "cache"
+		self.zip = zip
+		
+	def getManga(self, url, chapter=0, stop=0):
+		mainPage = "%s%s" % (url, '?no_warning=1')
+		self.log(mainPage)
+		(html, headers) = self.openUrl(mainPage)
+		infoTitle = re.compile('<h2>([^>]+)</h2>').findall(html)
+		self.log(infoTitle[0])
+		chs = re.compile('class="edit">edit</a>\s+?<a href="([^"]+)" class="chico">').findall(html)		
+		if chapter and (chapter > len(chs)):
+			self.log("max chapter: %s" % (str(len(chs)))) 		
+			sys.exit(1)
+		chs.reverse()
+		chsChapter = []
+		flag = 0
+		splitUrl = re.compile('/([^/]+)').findall(url)
+		alldir = ReadDir(self.cache + os.sep + splitUrl[1] + os.sep + splitUrl[2]).walk()
+		if alldir: 
+			lastdir = alldir[-1][0].strip(self.cache + os.sep)
+			lastf = alldir[-1][1]
+			lastsort = []
+			lastfile = 0
+			if lastf:
+				for number in lastf:
+					nfile = re.compile('(\d+?)\.').findall(number)
+					if nfile: lastsort.append(int(nfile[0]))
+				if lastsort:
+					lastsort.sort()
+					lastfile = lastsort[-1]
+			alldir = []
+		else: 
+			lastdir=[]
+		for ch in chs:
+			c = re.compile('c([0-9\.]+)').findall(ch)
+			if chapter and stop:
+				if (float(c[0]) >= chapter) and (float(c[0]) <= stop):
+					chsChapter.append(ch)
+			elif chapter and not stop:
+				if (float(c[0]) >= chapter):
+					chsChapter.append(ch)
+			elif not chapter and stop:
+				if (float(c[0]) <= stop):
+						chsChapter.append(ch)
+			else:
+				if lastdir:
+					if flag == 0 and (ch.replace('/', os.sep).strip(os.sep) == lastdir): 
+						flag = 1
+					if flag == 1: 
+						chsChapter.append(ch)
+				else:
+					chsChapter.append(ch)
+		for ch in range(0, len(chsChapter)):
+			if not os.path.exists(chsChapter[ch].replace('/', os.sep).lstrip(os.sep)):
+				os.makedirs(chsChapter[ch].replace('/', os.sep).lstrip(os.sep))
+			if not os.path.exists(self.cache + chsChapter[ch].replace('/', os.sep)):
+				os.makedirs(self.cache + chsChapter[ch].replace('/', os.sep))
+			chUrl = "http://www.%s.com%s" % (self.prefix, chsChapter[ch])
+			self.log(chUrl)
+			(html, headers) = self.openUrl(chUrl)
+			pageCount = re.compile('<option value="\d+"[^>]+?>(\d+)</option>').findall(html)
+			gzip = False
+			ext = 'html'
+			if flag == 1:
+				if lastfile:
+					allPages = pageCount[(lastfile - 1):(len(pageCount) / 2)]
+					lastfile = 0
+				else:
+					allPages = pageCount[0:(len(pageCount) / 2)]
+			else:
+				allPages = pageCount[0:(len(pageCount) / 2)]
+			for pagen in allPages:
+				self.log('Page: %s %s%s.html' % (pagen, chUrl, pagen))
+				if int(pagen) > 1:
+					request = urllib2.Request('%s%s.html' % (chUrl, pagen))
+					request.add_header('Accept-encoding', 'gzip')
+					page = self.opener.open(request)
+					if page.headers.getheader('content-encoding') == 'gzip':
+						gzip = True
+						ext = 'gz'
+					else:
+						gzip = False
+						ext = 'html'
+					localFile = '%s%s%s.%s' % (self.cache, chsChapter[ch].replace('/', os.sep), pagen, ext)
+					if os.path.exists(localFile):
+						if page.headers.getheader('Content-Length') and (long(page.headers.getheader('Content-Length')) == os.path.getsize(localFile)):
+							html = self.readFile(localFile)
+							self.log("skip %s" % (localFile))
+						else:
+							html = page.read()
+							tmphtml = html
+					else:
+						html = page.read()
+						tmphtml = html
+				else:
+					localFile = '%s%s%s.%s' % (self.cache, chsChapter[ch].replace('/', os.sep), pagen, ext)
+					tmphtml = html
+				if gzip:
+					html = self.gunzip(cStringIO.StringIO(html))
+				imageHtml = re.compile(';"><img src="([^"]+)" width="\d+" id="image"').findall(html) 
+				outFile = '%s%s%s' % (chsChapter[ch].replace('/', os.sep).strip(os.sep), os.sep, imageHtml[0].split('/')[-1])
+				if tmphtml: 
+					self.writeFile(localFile, tmphtml)
+					tmphtml = ''
+				if os.path.exists(outFile):
+					self.log("skip %s" % (outFile))
+					continue
+				else:
+					self.log("download %s" % (outFile))
+					(image, header) = self.openUrl(imageHtml[0])	
+				self.writeFile(outFile, image)
+			if self.zip is True:
+				zipName = self.prefix + "_"
+				for name in chsChapter[ch].split('/'):
+					if name and (name != 'manga'):
+						zipName += name + "_" 
+				zipName = zipName.rstrip('_') + ".zip"
+				self.createZip(dir=chsChapter[ch].replace('/', os.sep).lstrip(os.sep), zipName=zipName)
+			
+	def searchManga(self, search):
+		s = {"name": search}
+		url = "http://www.%s.com/search.php" % (self.prefix)
+		(html, headers) = self.openUrl(url + '?' + urllib.urlencode(s))
+		if '<table id="listing">' in html:
+			result = re.compile('<td><a href="([^"]+)" class="manga_\w+">([^<]+)</a>').findall(html)
+			if result:
+				c = 0
+				for item in result:
+					c += 1
+					shttp = "http://www.%s.com%s" % (self.prefix, item[0])
+					print "%03d. %s: %s" % (c, item[1], shttp)
+			else:
+				print "No matches found."
+		else:
+			print "No matches found."
+
+	def openUrl(self, url):
+		request = urllib2.Request(url)
+		request.add_header('Accept-encoding', 'gzip')
+		retry = 1
+		maxRetry = 4
+		while retry < maxRetry:
+			try:
+				page = self.opener.open(request)
+			except urllib2.URLError, e:
+				self.log(e)
+				self.log("(%s) %s" % (retry, request.get_full_url()))
+				retry += 1
+			else:
+				retry = maxRetry
+		html = page.read()
+		if page.headers.getheader('content-encoding') == 'gzip':
+			html = self.gunzip(cStringIO.StringIO(html))
+		return(html, page.headers.items())
+	
+	def writeFile(self, filename, content):
+		fileCache = file(filename, 'wb')
+		fileCache.write(content)
+		fileCache.close()
+		
+	def readFile(self, filename):
+		fileCache = file(filename, 'rb')
+		content = fileCache.read()
+		fileCache.close()
+		return content
+		
+	def gunzip(self, fileobj):
+		g = gzip.GzipFile(fileobj=fileobj)
+		gFile = g.read()
+		g.close()
+		return gFile
+		
+	def createZip(self, dir, zipName):
+		if os.path.isdir(dir):
+			self.log("creating %s" % (zipName))
+			zip = zipfile.ZipFile(zipName, mode="w", compression=zipfile.ZIP_DEFLATED)	
+			for item in os.listdir(dir):
+				self.log("=> %s to %s" % (item, zipName))
+				zip.write(dir + item)
+			zip.close()
+	
+	def log(self, str):
+		print "%s >>> %s" % (time.strftime("%x - %X", time.localtime()), str)
+
+class ReadDir:
+	def __init__(self, DIR):
+		self.dir = DIR
+		self.dirlist = []
+	def _f(self, args, dirname, names):
+		self.dirlist.append((dirname, names)) 
+	def walk(self):
+		os.path.walk(self.dir, self._f, '')
+		return (self.dirlist)
+		
+if __name__ == '__main__':
+	main()
