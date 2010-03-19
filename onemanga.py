@@ -106,8 +106,9 @@ class onemanga:
             subChUrl = "http://www.%s.com%s" % (self.prefix, subPage[0])
             self.log(subChUrl)
             (html, headers) = self.openUrl(subChUrl)
+            pageText = re.compile('<select name="page" id="id_page_select" class="page-select">.*</select>', re.DOTALL).findall(html)
             #pageCount = re.compile('<option value="([^"]+)"[^>]+?>[^<]+</option>').findall(html)
-            pageCount = re.compile('<option value="([^"]+)"(?:[^<]+)?>[^<]+</option> ').findall(html)
+            pageCount = re.compile('<option value="([^"]+)"(?:[^<]+)?>[^<]+</option>').findall(pageText[0])
             gzip = False
             ext = 'html'
             for pagen in range(0, len(pageCount)):
